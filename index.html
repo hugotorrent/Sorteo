@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="Aplicación de sorteo de rifa con aleatoriedad criptográfica, historial de ganadores y vista previa de participantes." />
+  <title>🎉 Sorteo de Rifa</title>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700;900&display=swap" rel="stylesheet" />
+
+  <!-- SheetJS para procesar Excel -->
+  <script src="https://cdn.sheetjs.com/xlsx-0.20.2/package/dist/xlsx.full.min.js"></script>
+  <!-- canvas-confetti para la celebración -->
+  <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.9.3/dist/confetti.browser.min.js"></script>
+
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+
+  <!-- Fondo animado -->
+  <div class="bg-particles" id="bgParticles" aria-hidden="true"></div>
+
+  <main class="app-container" id="appContainer">
+
+    <!-- ── CABECERA ─────────────────────────────── -->
+    <header class="app-header">
+      <div class="header-icon" aria-hidden="true">🎰</div>
+      <h1 class="app-title">Sorteo de Rifa</h1>
+      <p class="app-subtitle">Aleatoriedad criptográfica · Sin sesgo</p>
+    </header>
+
+    <!-- ── CARGA DE ARCHIVO ─────────────────────── -->
+    <section class="upload-section" id="uploadSection" aria-label="Cargar participantes">
+      <label class="upload-label" for="fileInput" id="uploadDropZone">
+        <div class="upload-icon" aria-hidden="true">📂</div>
+        <span class="upload-text">Arrastrá y soltá tu archivo aquí</span>
+        <span class="upload-subtext">o hacé clic para seleccionarlo</span>
+        <span class="upload-formats">Formatos: <strong>.xlsx</strong> &nbsp;|&nbsp; <strong>.json</strong></span>
+        <input type="file" id="fileInput" accept=".xlsx,.xls,.json"
+               aria-label="Seleccionar archivo de participantes" class="file-input-hidden" />
+      </label>
+      <div class="upload-progress" id="uploadProgress" aria-hidden="true">
+        <div class="progress-bar" id="progressBar"></div>
+      </div>
+      <p class="upload-status" id="uploadStatus" role="status" aria-live="polite"></p>
+    </section>
+
+    <!-- ── CONTADOR ─────────────────────────────── -->
+    <section class="counter-section" id="counterSection" aria-label="Total de participantes" hidden>
+      <div class="counter-card">
+        <span class="counter-label">Total de participantes cargados</span>
+        <span class="counter-number" id="counterNumber">0</span>
+        <span class="counter-icon" aria-hidden="true">👥</span>
+      </div>
+    </section>
+
+    <!-- ── PREVIEW PANEL (colapsable) ───────────── -->
+    <section class="preview-section" id="previewSection" hidden aria-label="Vista previa de participantes">
+      <details class="preview-details" id="previewDetails">
+        <summary class="preview-summary" id="previewSummary">
+          <span class="preview-summary-icon" aria-hidden="true">👁</span>
+          <span class="preview-summary-text">Ver todos los participantes</span>
+          <span class="preview-pool-badge" id="previewPoolBadge"></span>
+          <span class="preview-chevron" aria-hidden="true">▼</span>
+        </summary>
+        <div class="preview-grid" id="previewGrid" role="list" aria-label="Lista de participantes"></div>
+      </details>
+    </section>
+
+    <!-- ── SORTEAR ──────────────────────────────── -->
+    <section class="draw-section" id="drawSection" aria-label="Realizar sorteo" hidden>
+      <button class="draw-btn" id="drawBtn" type="button" aria-label="Iniciar sorteo">
+        <span class="draw-btn-icon" aria-hidden="true">🎲</span>
+        <span class="draw-btn-text">¡SORTEAR!</span>
+      </button>
+      <p class="draw-hint" id="drawHint">La ruleta girará 5 segundos para generar suspenso</p>
+
+      <!-- Opciones del sorteo -->
+      <div class="draw-options">
+        <label class="exclude-label" for="excludeCheck">
+          <input type="checkbox" id="excludeCheck" />
+          <span class="exclude-text">Excluir ganadores anteriores</span>
+          <span class="exclude-count" id="excludeCount" hidden></span>
+        </label>
+        <button class="btn-change-list" id="changeListBtn" type="button"
+                title="Volver al inicio y cargar otra lista">
+          ↩ Cambiar lista
+        </button>
+      </div>
+    </section>
+
+    <!-- ── RULETA ───────────────────────────────── -->
+    <section class="roulette-section" id="rouletteSection" aria-label="Animación de sorteo" hidden>
+      <div class="roulette-label" aria-hidden="true">Sorteando...</div>
+      <div class="roulette-wrapper">
+        <div class="roulette-overlay roulette-overlay--top"  aria-hidden="true"></div>
+        <div class="roulette-track" id="rouletteTrack" aria-live="assertive" aria-atomic="true"></div>
+        <div class="roulette-overlay roulette-overlay--bottom" aria-hidden="true"></div>
+      </div>
+      <!-- Botón cancelar -->
+      <button class="cancel-btn" id="cancelBtn" type="button" aria-label="Cancelar sorteo">
+        ✕ Cancelar sorteo
+      </button>
+    </section>
+
+    <!-- ── GANADOR ──────────────────────────────── -->
+    <section class="winner-section" id="winnerSection" aria-label="Ganador del sorteo" hidden>
+      <div class="winner-card" id="winnerCard">
+        <div class="winner-trophy" aria-hidden="true">🏆</div>
+        <p class="winner-eyebrow">¡Felicitaciones al ganador!</p>
+        <h2 class="winner-name" id="winnerName"></h2>
+        <p class="winner-meta" id="winnerMeta"></p>
+        <div class="winner-actions">
+          <button class="btn-secondary" id="copyBtn" type="button">📋 Copiar nombre</button>
+          <button class="btn-secondary btn-again" id="drawAgainBtn" type="button">🎲 Sortear de nuevo</button>
+          <button class="btn-secondary" id="resetBtn" type="button">↩ Cambiar lista</button>
+        </div>
+      </div>
+
+      <!-- Historial de ganadores -->
+      <div class="history-section" id="historySection" hidden>
+        <h3 class="history-title">🏅 Historial de ganadores</h3>
+        <div class="history-list" id="historyList" role="list"></div>
+      </div>
+    </section>
+
+  </main>
+
+  <script src="app.js"></script>
+</body>
+</html>
