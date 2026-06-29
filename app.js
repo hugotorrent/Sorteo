@@ -55,9 +55,95 @@ function toggle(el, visible) {
   el.hidden = !visible;
 }
 
+/* ================================================================
+   1. SOUND SYSTEM
+   Efectos de audio simples con Web Audio API.
+   ================================================================ */
+const SoundSystem = (() => {
+  let audioCtx = null;
+  let unlocked = false;
+
+  function ensureContext() {
+    if (!audioCtx) {
+      const AudioCtor = window.AudioContext || window.webkitAudioContext;
+      if (!AudioCtor) return null;
+      audioCtx = new AudioCtor();
+    }
+    return audioCtx;
+  }
+
+  function unlock() {
+    if (unlocked) return;
+    const ctx = ensureContext();
+    if (!ctx) return;
+    if (ctx.state === 'suspended') {
+      ctx.resume().catch(() => {});
+    }
+    unlocked = true;
+  }
+
+  function playTone(freq, duration, type = 'sine', volume = 0.04, slide = 0, delay = 0) {
+    const ctx = ensureContext();
+    if (!ctx) return;
+    unlock();
+
+    const startTime = ctx.currentTime + delay;
+    const gain = ctx.createGain();
+    gain.gain.setValueAtTime(0.0001, startTime);
+    gain.gain.exponentialRampToValueAtTime(volume, startTime + 0.01);
+    gain.gain.exponentialRampToValueAtTime(0.0001, startTime + duration);
+
+    const osc = ctx.createOscillator();
+    osc.type = type;
+    osc.frequency.setValueAtTime(freq, startTime);
+    if (slide) osc.frequency.exponentialRampToValueAtTime(freq * slide, startTime + duration);
+
+    osc.connect(gain).connect(ctx.destination);
+    osc.start(startTime);
+    osc.stop(startTime + duration + 0.02);
+  }
+
+  function play(kind) {
+    unlock();
+    switch (kind) {
+      case 'upload':
+        playTone(880, 0.08, 'triangle', 0.03);
+        playTone(1320, 0.12, 'sine', 0.02, 1.18, 0.05);
+        break;
+      case 'draw':
+        playTone(440, 0.14, 'sawtooth', 0.025);
+        playTone(660, 0.18, 'triangle', 0.02, 1.35, 0.08);
+        break;
+      case 'cancel':
+        playTone(220, 0.12, 'square', 0.025);
+        playTone(180, 0.14, 'sine', 0.02, 0.82, 0.06);
+        break;
+      case 'winner':
+        playTone(523.25, 0.16, 'triangle', 0.035);
+        playTone(659.25, 0.16, 'sine', 0.03, 1.26, 0.08);
+        playTone(783.99, 0.2, 'sine', 0.025, 1.5, 0.16);
+        break;
+      case 'copy':
+        playTone(860, 0.08, 'square', 0.02);
+        break;
+      case 'reset':
+        playTone(500, 0.08, 'sine', 0.02);
+        playTone(400, 0.10, 'sine', 0.015, 0.8, 0.06);
+        break;
+      default:
+        break;
+    }
+  }
+
+  document.addEventListener('pointerdown', unlock, { once: true });
+  document.addEventListener('keydown', unlock, { once: true });
+
+  return { play };
+})();
+
 
 /* ================================================================
-   1. PARTICLE BACKGROUND
+   2. PARTICLE BACKGROUND
    Partículas decorativas flotantes en el fondo.
    ================================================================ */
 const ParticleBackground = (() => {
@@ -624,6 +710,7 @@ const App = (() => {
       isDrawing     = false;
 
       setStatus(`✅ "${file.name}" cargado — ${participants.length} participantes.`, 'success');
+      SoundSystem.play('upload');
 
       // Mostrar secciones
       toggle(counterSection, true);
@@ -660,6 +747,7 @@ const App = (() => {
 
     isDrawing = true;
     drawBtn.disabled = true;
+    SoundSystem.play('draw');
 
     // ── 1. Seleccionar ganador ANTES de la animación ───────────────
     const { winner } = RandomPicker.pick(pool);
@@ -709,6 +797,7 @@ const App = (() => {
 
     WinnerDisplay.show(winner, participants.length, pool.length);
     WinnerDisplay.renderHistory(winnerHistory);
+    SoundSystem.play('winner');
     toggle(winnerSection, true);
     winnerSection.scrollIntoView({ behavior: 'smooth', block: 'center' });
 
@@ -725,7 +814,10 @@ const App = (() => {
 
   /** Cancela el sorteo en curso. */
   function cancelDraw() {
-    if (drawSignal) drawSignal.cancelled = true;
+    if (drawSignal) {
+      drawSignal.cancelled = true;
+      SoundSystem.play('cancel');
+    }
   }
 
   /**
@@ -743,6 +835,7 @@ const App = (() => {
    * Equivalente a recargar pero sin perder el CDN ya descargado.
    */
   function fullReset() {
+    SoundSystem.play('reset');
     participants  = [];
     excludedSet   = new Set();
     winnerHistory = [];
@@ -828,9 +921,11 @@ const App = (() => {
       const nameEl = document.getElementById('winnerName');
       const text   = nameEl.textContent;
       navigator.clipboard.writeText(text).then(() => {
+        SoundSystem.play('copy');
         copyBtn.textContent = '✅ ¡Copiado!';
         setTimeout(() => { copyBtn.textContent = '📋 Copiar nombre'; }, 2000);
       }).catch(() => {
+        SoundSystem.play('cancel');
         copyBtn.textContent = '❌ Error';
         setTimeout(() => { copyBtn.textContent = '📋 Copiar nombre'; }, 2000);
       });
